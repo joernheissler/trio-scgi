@@ -1,0 +1,46 @@
+#!/usr/bin/env python
+
+import logging
+import trio
+from trio_scgi import ScgiStream, ProtocolError
+
+
+async def scgi_server(stream):
+    scgi = ScgiStream(stream)
+
+    headers = await scgi.receive_headers(65536)
+
+    await scgi.send_header(200, 'OK', {'Content-Type': 'text/plain'})
+
+    await stream.send_all(b'Headers:\r\n')
+
+    for k, v in headers.items():
+        await stream.send_all('{!r}: {!r}\r\n'.format(k, v).encode())
+
+    await stream.send_all(b'\r\nBody:\r\n')
+    while True:
+        buf = await scgi.receive_body(4096)
+        if not buf:
+            break
+        await stream.send_all(buf)
+
+    await stream.aclose()
+
+
+async def serve(stream):
+    try:
+        with trio.fail_after(30):
+            await scgi_server(stream)
+    except (EOFError, ProtocolError, trio.TooSlowError) as ex:
+        logging.info('%s: %s', type(ex), ex)
+
+
+async def main():
+    await trio.serve_tcp(serve, 8081)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(module)s %(levelname)s: %(message)s',
+)
+
+trio.run(main)
