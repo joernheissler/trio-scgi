@@ -113,6 +113,26 @@ class ScgiStream:
 
         return buf
 
+    async def receive_full_body(self) -> bytearray:
+        """
+        Receive the complete HTTP request body.
+
+        Returns:
+            The body.
+
+        Raises:
+            EOFError: Client closed the connection
+        """
+
+        body = bytearray()
+        while True:
+            tmp = await self.receive_body(4096)
+            if not tmp:
+                break
+            body.extend(tmp)
+
+        return body
+
     async def send_header(self, code: int, reason: str, headers: Union[dict, CIMultiDict]):
         """
         Send the HTTP response header.
